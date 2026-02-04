@@ -1,93 +1,67 @@
-# Auto-Update System Setup Guide
+# System Einrichtung & Auto-Update Guide
 
-## 1. Environment Setup
+Das System wurde auf ein **Skript-basiertes Release-System** umgestellt.
 
-### Install Rust Dependencies
+## 1. Setup
 
-The `src-tauri/Cargo.toml` has been updated with `tauri-plugin-updater` and `reqwest`.
-Ensure you run:
+### Abhängigkeiten installieren
 
 ```bash
-cd src-tauri
-cargo build
+pnpm install
+# sicherstellen, dass dependencies installiert sind
 ```
 
-### Install Svelte Dependencies
+### Environment Variablen (.env)
 
-Already handled in `package.json`.
+Erstelle eine `.env` Datei im Root-Verzeichnis basierend auf `.env.example`:
 
-## 2. Signing Keys Generation (Critical)
+1.  **GITHUB_TOKEN**: Ein Personal Access Token (Classic) mit `repo` und `gist` Rechten.
+2.  **GIST_ID**: Erstelle einen neuen öffentlichen Gist auf gist.github.com mit einer Datei `latest.json` (Inhalt `{}`). Kopiere die ID aus der URL.
+3.  **REPO_OWNER**: Dein GitHub Nutzername.
+4.  **REPO_NAME**: "nudge".
+5.  **TAURI_SIGNING_PRIVATE_KEY**: Der private Key aus `src-tauri/key.md` (oder wo du ihn gespeichert hast).
+6.  **TAURI_SIGNING_KEY_PASSWORD**: Falls gesetzt.
 
-Tauri updates must be signed.
+### Tauri Config anpassen
 
-1. **Generate Keys**:
-   Run this in your terminal (Windows):
-
-   ```powershell
-   cd src-tauri
-   pnpm tauri signer generate -w tauri.conf.json
-   ```
-
-   _If `pnpm tauri` doesn't work directly, use `pnpm exec tauri`._
-
-   This will:
-   - Create a private key (save this securely! e.g., in GitHub Secrets).
-   - Add the public key to `tauri.conf.json` (replacing `YOUR_PUBLIC_KEY_HERE`).
-
-2. **Environment Variables**:
-   For local signing or CI/CD, set:
-   - `TAURI_SIGNING_PRIVATE_KEY`: Content of the private key.
-   - `TAURI_SIGNING_KEY_PASSWORD`: Password if you attempted one (optional).
-
-## 3. Configuration
-
-### tauri.conf.json
-
-Update the `endpoints` URL in `src-tauri/tauri.conf.json`:
+Öffne `src-tauri/tauri.conf.json`.
+Setze den Updater Endpoint auf die **RAW** URL deines Gists.
 
 ```json
 "endpoints": [
-  "https://github.com/USERNAME/REPO/releases/latest/download/latest.json"
+  "https://gist.githubusercontent.com/DEIN_USER/DEINE_GIST_ID/raw/latest.json"
 ]
 ```
 
-Replace `USERNAME/REPO` with your GitHub details.
+_Tipp: Klicke beim Gist auf "Raw", um die URL zu bekommen. Entferne den Commit-Hash (die lange Nummer nach `/raw/`), damit es immer auf die neueste Version zeigt._
 
-### Workflow Secrets
+## 2. Release erstellen (Automatisch)
 
-In your GitHub Repo -> Settings -> Secrets and variables -> Actions:
+Führe einfach diesen Befehl aus, um die App zu bauen, signieren und zu releasen:
 
-- `TAURI_SIGNING_PRIVATE_KEY`: Your generated private key.
-- `TAURI_SIGNING_KEY_PASSWORD`: Your password (if set).
-- `GITHUB_TOKEN`: (Automatically provided, but ensure permissions are set).
+```bash
+# Syntax: pnpm run release [VERSION] [CRITICAL: true/false]
 
-## 4. Updates Hosting (GitHub Releases)
+# Normales Update
+pnpm run release 1.0.1 false
 
-The `release.yml` workflow is configured to:
+# Kritisches Update (erzwingt Modal)
+pnpm run release 1.0.2 true
+```
 
-1. Build the app on tag push (e.g. `v1.0.1`).
-2. Sign the update bundles.
-3. Create a GitHub Release.
-4. Upload assets.
+Das Skript erledigt alles:
 
-**Important**: You must generate and upload the `latest.json` to the release assets.
-The provided workflow has a spot for this. You can manually upload the `latest.json` (example provided in root) or automate it.
+1.  Erhöht Version in `package.json`, `tauri.conf.json`, `Cargo.toml`.
+2.  Baut die App (`tauri build`).
+3.  Erstellt GitHub Release & lädt Assets hoch.
+4.  Aktualisiert die `latest.json` im Gist (inkl. Signatur und Critical-Flag).
 
-## 5. Testing Updates Locally
+## 3. Update Logik
 
-1. Build a version `0.1.0` (current).
-2. Change `package.json` and `tauri.conf.json` version to `0.1.1`.
-3. Build the new version: `pnpm tauri build`.
-4. Copy the resulting `.nsis.zip` (Windows) and `latest.json` to a local server or GitHub Gist.
-5. Point your `tauri.conf.json` endpoint to that URL.
-6. Run the **0.1.0** version of your app (dev or build).
-7. It should detect the 0.1.1 update.
+Die Rust-Datei `update.rs` prüft nun effizient auf das `CRITICAL UPDATE` Flag in den Release-Notes, die vom Skript automatisch gesetzt werden, falls `true` übergeben wurde. Das spart einen zusätzlichen Netzwerk-Request.
 
-## 6. Critical Updates
+## 4. Testen
 
-To verify the "Critical" mode:
-
-1. Edit `latest.json` on your server/release.
-2. Set `"critical": true`.
-3. Restart the App.
-4. The Fullscreen Modal (CriticalUpdateModal) should appear immediately.
+1.  Release `0.1.0` lokal installiert haben.
+2.  `pnpm run release 0.1.1 true`.
+3.  App starten -> Sollte Kritisches Update anzeigen.
