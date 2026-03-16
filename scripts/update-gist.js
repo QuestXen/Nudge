@@ -1,7 +1,14 @@
 /**
  * Wird von GitHub Actions aufgerufen um latest.json im Gist zu aktualisieren.
- * Benötigte Env-Variablen: GIST_TOKEN, GIST_ID, REPO_OWNER, REPO_NAME,
- *                           VERSION, TAG, INSTALLER_NAME, CRITICAL, SIG_PATH
+ *
+ * Tauri v2 NSIS Update-Mechanismus:
+ *   - Der Updater lädt .nsis.zip herunter (NICHT die .exe)
+ *   - Die Signatur ist der Inhalt von .nsis.zip.sig
+ *   - Die URL in latest.json muss auf .nsis.zip zeigen
+ *
+ * Benötigte Env-Variablen:
+ *   GIST_TOKEN, GIST_ID, REPO_OWNER, REPO_NAME,
+ *   VERSION, TAG, ZIP_NAME, CRITICAL, SIG_PATH
  */
 import { Octokit } from "@octokit/rest";
 import fs from "fs-extra";
@@ -13,12 +20,12 @@ const {
   REPO_NAME,
   VERSION,
   TAG,
-  INSTALLER_NAME,
+  ZIP_NAME,   // .nsis.zip filename — Tauri-Updater URL
   CRITICAL,
-  SIG_PATH,
+  SIG_PATH,   // Pfad zur .nsis.zip.sig Datei
 } = process.env;
 
-const missing = ["GIST_TOKEN", "GIST_ID", "REPO_OWNER", "REPO_NAME", "VERSION", "TAG", "INSTALLER_NAME", "SIG_PATH"]
+const missing = ["GIST_TOKEN", "GIST_ID", "REPO_OWNER", "REPO_NAME", "VERSION", "TAG", "ZIP_NAME", "SIG_PATH"]
   .filter((key) => !process.env[key]);
 
 if (missing.length > 0) {
@@ -27,11 +34,15 @@ if (missing.length > 0) {
 }
 
 const isCritical = CRITICAL === "true";
-const installerUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG}/${INSTALLER_NAME}`;
+
+// Tauri-Updater erwartet die .nsis.zip URL (nicht die .exe!)
+const updateUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG}/${ZIP_NAME}`;
+
+// Signatur = Inhalt der .nsis.zip.sig Datei
 const signature = await fs.readFile(SIG_PATH, "utf8");
 
 const notes = isCritical
-  ? `## Update v${VERSION}\n\n⚠️ CRITICAL UPDATE\n\nDieses Update enthält wichtige Sicherheitskorrekturen und wird automatisch installiert.`
+  ? `## Update v${VERSION}\n\n⚠️ CRITICAL UPDATE\n\nDieses Update enthält wichtige Korrekturen und wird automatisch installiert.`
   : `## Update v${VERSION}\n\nVerbesserungen und Fehlerbehebungen.`;
 
 const latestJson = {
@@ -41,13 +52,13 @@ const latestJson = {
   platforms: {
     "windows-x86_64": {
       signature: signature.trim(),
-      url: installerUrl,
+      url: updateUrl,         // .nsis.zip URL für den Updater
     },
   },
 };
 
 console.log(`📦 Version:    ${VERSION}`);
-console.log(`🔗 URL:        ${installerUrl}`);
+console.log(`🔗 URL:        ${updateUrl}`);
 console.log(`⚠️  Critical:   ${isCritical}`);
 
 const octokit = new Octokit({ auth: GIST_TOKEN });

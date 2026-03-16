@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Setup Rust
@@ -62,18 +62,52 @@ jobs:
           TAURI_SIGNING_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}
         run: pnpm tauri build
 
+      # Tauri v2 NSIS erzeugt:
+      #   nudge_X.X.X_x64-setup.exe         → Installer für manuelle Installation
+      #   nudge_X.X.X_x64-setup.nsis.zip    → Update-Paket (was der Updater lädt)
+      #   nudge_X.X.X_x64-setup.nsis.zip.sig → Signatur des ZIP (Pflicht für den Updater)
+      # .sig-Dateien werden NUR erzeugt wenn TAURI_SIGNING_PRIVATE_KEY gesetzt ist!
       - name: Find build artifacts
         id: artifacts
         shell: bash
         run: |
           BUNDLE_DIR="src-tauri/target/release/bundle/nsis"
-          INSTALLER=$(ls "$BUNDLE_DIR"/*.exe | head -1)
-          SIG=$(ls "$BUNDLE_DIR"/*.sig | head -1)
-          echo "installer=$INSTALLER" >> $GITHUB_OUTPUT
-          echo "sig=$SIG" >> $GITHUB_OUTPUT
+
+          echo "=== Inhalt von $BUNDLE_DIR ==="
+          ls -la "$BUNDLE_DIR" 2>/dev/null || echo "(Verzeichnis nicht gefunden)"
+          echo "=============================="
+
+          # Installer (.exe) — für GitHub Release Download
+          INSTALLER=$(ls "$BUNDLE_DIR"/*.exe 2>/dev/null | head -1)
+          if [ -z "$INSTALLER" ]; then
+            echo "❌ Kein NSIS Installer (.exe) gefunden!"
+            exit 1
+          fi
+
+          # Update-Paket (.nsis.zip) — was der Tauri-Updater herunterlädt
+          ZIP=$(ls "$BUNDLE_DIR"/*.nsis.zip 2>/dev/null | head -1)
+
+          # Signatur (.nsis.zip.sig) — Pflicht für den Updater-Vertrauenscheck
+          SIG=$(ls "$BUNDLE_DIR"/*.nsis.zip.sig 2>/dev/null | head -1)
+
+          if [ -z "$SIG" ] || [ -z "$ZIP" ]; then
+            echo ""
+            echo "❌ Keine .nsis.zip.sig / .nsis.zip Dateien gefunden!"
+            echo "   → Ist TAURI_SIGNING_PRIVATE_KEY in den GitHub Secrets gesetzt?"
+            echo "   → Hinweis: Ohne Signing-Key erzeugt Tauri kein Update-Paket."
+            echo ""
+            exit 1
+          fi
+
+          echo "installer=$INSTALLER"       >> $GITHUB_OUTPUT
+          echo "zip=$ZIP"                   >> $GITHUB_OUTPUT
+          echo "sig=$SIG"                   >> $GITHUB_OUTPUT
           echo "installer_name=$(basename "$INSTALLER")" >> $GITHUB_OUTPUT
-          echo "Found installer: $INSTALLER"
-          echo "Found sig: $SIG"
+          echo "zip_name=$(basename "$ZIP")"             >> $GITHUB_OUTPUT
+
+          echo "✅ Installer: $INSTALLER"
+          echo "✅ ZIP:       $ZIP"
+          echo "✅ Sig:       $SIG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -86,6 +120,7 @@ jobs:
             ${{ steps.tag.outputs.critical == 'true' && '> ⚠️ **CRITICAL UPDATE** – Sofortige Installation erforderlich!' || 'Routine-Update mit Verbesserungen und Fehlerbehebungen.' }}
           files: |
             ${{ steps.artifacts.outputs.installer }}
+            ${{ steps.artifacts.outputs.zip }}
             ${{ steps.artifacts.outputs.sig }}
 
       - name: Update Gist (latest.json)
@@ -96,7 +131,8 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           VERSION: ${{ steps.tag.outputs.version }}
           TAG: ${{ steps.tag.outputs.tag }}
-          INSTALLER_NAME: ${{ steps.artifacts.outputs.installer_name }}
+          # ZIP_NAME → Tauri-Updater lädt .nsis.zip, nicht .exe
+          ZIP_NAME: ${{ steps.artifacts.outputs.zip_name }}
           CRITICAL: ${{ steps.tag.outputs.critical }}
           SIG_PATH: ${{ steps.artifacts.outputs.sig }}
         run: node scripts/update-gist.js
