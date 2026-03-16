@@ -1,19 +1,17 @@
 <script lang="ts">
   import { fade, fly } from "svelte/transition";
-  import { createEventDispatcher } from "svelte";
 
-  export let version: string;
-  export let notes: string = "";
-
-  const dispatch = createEventDispatcher();
-
-  function handleInstall() {
-    dispatch("install");
-  }
-
-  function handleDismiss() {
-    dispatch("dismiss");
-  }
+  let {
+    version,
+    notes = "",
+    oninstall,
+    ondismiss,
+  }: {
+    version: string;
+    notes?: string;
+    oninstall: () => void;
+    ondismiss: () => void;
+  } = $props();
 </script>
 
 <div
@@ -24,7 +22,6 @@
   <div
     class="glass-card flex items-center justify-between p-4 shadow-2xl bg-opacity-90 backdrop-blur-md border border-white/10 rounded-xl overflow-hidden relative"
   >
-    <!-- Animated Gradient Border/Glow -->
     <div
       class="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 pointer-events-none"
     ></div>
@@ -62,13 +59,13 @@
 
     <div class="flex items-center space-x-3 z-10">
       <button
-        on:click={handleDismiss}
+        onclick={ondismiss}
         class="px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/5 transition-all text-sm font-medium"
       >
         Später
       </button>
       <button
-        on:click={handleInstall}
+        onclick={oninstall}
         class="px-5 py-2 rounded-lg text-white shadow-lg transform hover:scale-105 transition-all duration-200 text-sm font-bold flex items-center space-x-2"
         style="background: linear-gradient(135deg, #667eea, #764ba2);"
       >

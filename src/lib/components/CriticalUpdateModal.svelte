@@ -2,9 +2,15 @@
   import { fade, scale } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
 
-  export let version: string;
-  export let progress: number = 0; // 0 to 100
-  export let statusMessage: string = "Bereite Update vor...";
+  let {
+    version,
+    progress = 0,
+    statusMessage = "Bereite Update vor...",
+  }: {
+    version: string;
+    progress?: number;
+    statusMessage?: string;
+  } = $props();
 </script>
 
 <div
@@ -15,7 +21,6 @@
     class="w-full max-w-lg bg-[#0f0f1e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden relative"
     in:scale={{ duration: 400, easing: cubicOut, start: 0.95 }}
   >
-    <!-- Background Decor -->
     <div
       class="absolute top-0 right-0 w-64 h-64 bg-[#764ba2]/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"
     ></div>
@@ -50,7 +55,6 @@
         wird nach Abschluss automatisch neu gestartet.
       </p>
 
-      <!-- Progress Bar -->
       <div
         class="relative w-full h-4 bg-[#16213e] rounded-full overflow-hidden mb-4 border border-white/5"
       >

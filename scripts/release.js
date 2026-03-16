@@ -45,6 +45,13 @@ async function updateFile(filePath, regex, replacement) {
 
 async function main() {
   try {
+    // 0. Checks
+    if (!process.env.TAURI_SIGNING_PRIVATE_KEY) {
+        console.warn("⚠️ TAURI_SIGNING_PRIVATE_KEY not found in environment. Build will probably not be signed!");
+    } else {
+        console.log("🔑 TAURI_SIGNING_PRIVATE_KEY found.");
+    }
+
     // 1. Update Versions
     console.log("📝 Updating versions...");
     await updateFile(
@@ -67,32 +74,71 @@ async function main() {
 
     // 2. Build App
     console.log("🔨 Building Tauri App...");
-    // Note: Assuming env vars like TAURI_SIGNING_PRIVATE_KEY are set in the shell or .env
-    // We pass stdio to inherit to see build progress
-    await execAsync("pnpm tauri build", { maxBuffer: 1024 * 1024 * 50 }); 
-    // If you need to see live output, spawn is better, but execAsync works for simple scripts if buffer is large enough.
+    
+    // Clean old bundles
+    const bundlePath = path.join(process.cwd(), "src-tauri/target/release/bundle/nsis");
+    if (fs.existsSync(bundlePath)) {
+        await fs.emptyDir(bundlePath);
+    }
 
-    // 3. Find Assets
+    // Validation: Check Key Format
+    const key = process.env.TAURI_SIGNING_PRIVATE_KEY;
+    if (!key) {
+        throw new Error("TAURI_SIGNING_PRIVATE_KEY is missing!");
+    }
+    console.log(`🔑 Key check: Length ${key.length}, Multiline: ${key.includes('\n')}`);
+    // Trim whitespace just in case
+    process.env.TAURI_SIGNING_PRIVATE_KEY = key.trim();
+
+    // Use spawn to stream output directly to the console
+    const { spawn } = await import("child_process");
+    
+    await new Promise((resolve, reject) => {
+        // Use shell: true to support pnpm command on Windows
+        const child = spawn("pnpm", ["tauri", "build"], { 
+            stdio: "inherit",
+            shell: true,
+            env: { ...process.env }
+        });
+        
+        child.on("close", (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`Build process exited with code ${code}`));
+        });
+        
+        child.on("error", (err) => {
+            reject(err);
+        });
+    });
+
+    // 3. Find Assets (Strict Version Check)
     console.log("📦 Locating assets...");
-    // Target directory typically: src-tauri/target/release/bundle/nsis/ (for windows)
-    // Adjust logic for your actual build target (msi vs nsis)
-    const bundlePath = path.join(process.cwd(), "src-tauri/target/release/bundle/nsis"); // Default windows
-    // Check if dir exists
+    
     if (!fs.existsSync(bundlePath)) {
        throw new Error(`Bundle path not found: ${bundlePath}. Check your tauri.conf.json targets.`);
     }
     
     const files = await fs.readdir(bundlePath);
-    const installer = files.find(f => f.endsWith(".exe") || f.endsWith(".msi")); // setup exe
-    const sig = files.find(f => f.endsWith(".sig"));
+    console.log("Files found:", files);
 
-    if (!installer || !sig) {
-        throw new Error("Could not find installer or signature file.");
+    // Filter by version to be safe
+    // Note: Tauri names files like "nudge_1.0.2_x64-setup.exe"
+    const installer = files.find(f => (f.endsWith(".exe") || f.endsWith(".msi")) && f.includes(version));
+    const sig = files.find(f => f.endsWith(".sig") && f.includes(version));
+
+    if (!installer) {
+        throw new Error(`Could not find installer for version ${version} in ${bundlePath}`);
+    }
+    if (!sig) {
+         throw new Error(`Could not find signature (.sig) for version ${version}. \nCheck if TAURI_SIGNING_PRIVATE_KEY is set correctly in .env.`);
     }
     
     const installerPath = path.join(bundlePath, installer);
     const sigPath = path.join(bundlePath, sig);
     
+    console.log(`✅ Found: ${installer}`);
+    console.log(`✅ Found: ${sig}`);
+
     // 4. Create GitHub Release
     console.log("☁️ Creating GitHub Release...");
     const releaseData = await octokit.repos.createRelease({
@@ -111,9 +157,7 @@ async function main() {
     console.log("⬆️ Uploading assets...");
     
     const installerContent = await fs.readFile(installerPath);
-    const sigContent = await fs.readFile(sigPath);
-
-    // Upload Installer
+    // ... rest of upload logic
     const installerUpload = await octokit.repos.uploadReleaseAsset({
       owner: REPO_OWNER,
       repo: REPO_NAME,
@@ -121,19 +165,22 @@ async function main() {
       name: installer,
       data: installerContent
     });
-
-    // Upload Signature? Not strictly necessary to assume strictly necessary for the update JSON, 
-    // but good for archiving. The update JSON requires the *content* of the sig, not the file itself usually.
-    // However, if we want to host it:
-    // await octokit.repos.uploadReleaseAsset({ ... }); 
     
+    // Also upload the signature, it's good practice
+    const sigContent = await fs.readFile(sigPath);
+    await octokit.repos.uploadReleaseAsset({
+      owner: REPO_OWNER,
+      repo: REPO_NAME,
+      release_id: releaseData.data.id,
+      name: sig,
+      data: sigContent
+    });
+
     // 6. Generate latest.json
     console.log("🔄 Updating Gist with latest.json...");
     
-    const sigString = sigContent.toString("utf8"); // The sig file content IS the signature string usually
+    const sigString = sigContent.toString("utf8"); 
     
-    // Construct the platform object. 
-    // NOTE: This script assumes Windows x64 primarily. extend for others if needed.
     const platforms = {
       "windows-x86_64": {
         "signature": sigString,
@@ -143,9 +190,9 @@ async function main() {
     
     const latestJson = {
       version: version,
-      notes: `Update v${version} is available!`,
+      notes: `## Update v${version}\n\n${isCritical ? "**⚠️ CRITICAL UPDATE**" : "Improvements and fixes."}`,
       pub_date: new Date().toISOString(),
-      critical: isCritical, // Custom flag
+      critical: isCritical, 
       platforms: platforms
     };
     

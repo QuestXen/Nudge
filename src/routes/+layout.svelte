@@ -1,19 +1,21 @@
 <script lang="ts">
   import "../app.css";
+  import type { Snippet } from "svelte";
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import UpdateBanner from "$lib/components/UpdateBanner.svelte";
   import CriticalUpdateModal from "$lib/components/CriticalUpdateModal.svelte";
 
-  let updateAvailable = false;
-  let isCritical = false;
-  let updateVersion = "";
-  let updateNotes = "";
+  let { children }: { children: Snippet } = $props();
 
-  let installProgress = 0;
-  let installStatus = "Initailisiere...";
-  let isInstalling = false;
+  let updateAvailable = $state(false);
+  let isCritical = $state(false);
+  let updateVersion = $state("");
+  let updateNotes = $state("");
+  let installProgress = $state(0);
+  let installStatus = $state("Initialisiere...");
+  let isInstalling = $state(false);
 
   interface UpdatePayload {
     update_available: boolean;
@@ -24,84 +26,63 @@
   }
 
   interface ProgressPayload {
-    event: string;
-    chunk_length: number;
-    content_length?: number;
+    downloaded: number;
+    total?: number;
+    percent: number;
   }
 
-  // --- Handlers ---
   async function checkForUpdates() {
     try {
       const result = await invoke<UpdatePayload>("check_for_updates");
-      console.log("Update check result:", result);
-
       if (result.update_available) {
-        updateVersion = result.version || "Unknown";
-        updateNotes = result.notes || "";
+        updateVersion = result.version ?? "Unbekannt";
+        updateNotes = result.notes ?? "";
         isCritical = result.critical;
         updateAvailable = true;
 
         if (isCritical) {
-          // Auto-start for critical
           startInstall();
         }
       }
     } catch (e) {
-      console.error("Failed to check updates:", e);
+      console.error("Update-Check fehlgeschlagen:", e);
     }
   }
 
   async function startInstall() {
     isInstalling = true;
+    installProgress = 0;
     installStatus = "Starte Download...";
-    await invoke("install_update").catch((e) => {
-      console.error("Install error:", e);
-      installStatus = "Fehler bei Installation!";
-      // Handle error (maybe show persistent error state or retry button)
-    });
+    try {
+      await invoke("install_update");
+    } catch (e) {
+      console.error("Installationsfehler:", e);
+      installStatus = "Fehler bei der Installation!";
+      isInstalling = false;
+    }
   }
 
-  // --- Lifecycle ---
-  let unlistenProgress: () => void;
-  let unlistenComplete: () => void;
+  let unlistenProgress: (() => void) | undefined;
+  let unlistenComplete: (() => void) | undefined;
 
   onMount(async () => {
-    // Initial Check
-    await checkForUpdates();
-
-    // Setup Listeners
-    unlistenProgress = await listen<ProgressPayload>(
-      "update-progress",
-      (event) => {
-        const { chunk_length, content_length } = event.payload;
-        if (content_length) {
-          // This is a simple approximation/accumulation if you track total downloaded manually
-          // But the payload event helps.
-          // Since tauri v2 updater events might differ, we rely on what we emitted in Rust.
-          // In a real scenario, we'd accumulate `chunk_length`.
-          // For demo, we might just increment or if we had total from start.
-          // Let's assume content_length is passed.
-          // Since we don't hold state of `total_downloaded` in JS easily without resets,
-          // let's do a fake visual progress if proper tracking isn't easy,
-          // OR better: Assume the Rust side emits the proper percentage or we accumulate in a store.
-          // For now, let's just make it look alive.
-          installStatus = "Downloading...";
-          // Actually, let's just use an indeterminate loader if we don't calculate % accurately easily here.
-          // Or update progress:
-          if (installProgress < 90) installProgress += 1; // Fake progress for demo unless we track byte by byte
-        }
-      },
-    );
+    // Listener ZUERST registrieren, damit bei kritischem Update kein Event verpasst wird
+    unlistenProgress = await listen<ProgressPayload>("update-progress", (event) => {
+      installProgress = Math.min(Math.round(event.payload.percent), 99);
+      installStatus = "Wird heruntergeladen...";
+    });
 
     unlistenComplete = await listen("update-complete", () => {
       installProgress = 100;
       installStatus = "Installation abgeschlossen! Neustart...";
     });
+
+    await checkForUpdates();
   });
 
   onDestroy(() => {
-    if (unlistenProgress) unlistenProgress();
-    if (unlistenComplete) unlistenComplete();
+    unlistenProgress?.();
+    unlistenComplete?.();
   });
 </script>
 
@@ -113,8 +94,8 @@
       <UpdateBanner
         version={updateVersion}
         notes={updateNotes}
-        on:install={startInstall}
-        on:dismiss={() => (updateAvailable = false)}
+        oninstall={startInstall}
+        ondismiss={() => (updateAvailable = false)}
       />
     </div>
   {/if}
@@ -127,12 +108,10 @@
     />
   {/if}
 
-  <!-- Main Content Slot -->
   <main
     class:blur-sm={isCritical || isInstalling}
     class="transition-all duration-300 relative"
   >
-    <!-- Background Ambient Glow -->
     <div class="fixed inset-0 pointer-events-none z-0">
       <div
         class="absolute top-[20%] left-[20%] w-96 h-96 bg-purple-600/10 rounded-full blur-[100px]"
@@ -142,7 +121,7 @@
       ></div>
     </div>
     <div class="relative z-10">
-      <slot />
+      {@render children()}
     </div>
   </main>
 </div>
