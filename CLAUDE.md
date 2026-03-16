@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend**: SvelteKit v2 + Svelte v5 + TypeScript + Tailwind CSS v4
 - **Backend**: Tauri v2 + Rust
-- **Build Tool**: Vite v6
+- **Build Tool**: Vite v8
 - **Package Manager**: pnpm
 
 ## Befehle
@@ -20,9 +20,9 @@ pnpm build            # Frontend-Build (→ /build)
 pnpm check            # TypeScript/Svelte Type-Check
 pnpm check:watch      # Type-Check im Watch-Modus
 
-# Release-Pipeline (erfordert .env)
-pnpm run release 1.0.2 false   # Normales Update
-pnpm run release 1.0.2 true    # Kritisches Update (erzwingt sofortige Installation)
+# Release (pusht Tag → GitHub Actions baut + released automatisch)
+pnpm release 1.0.2             # Normales Update
+pnpm release 1.0.2 true        # Kritisches Update (erzwingt sofortige Installation)
 ```
 
 ## Architektur
@@ -52,7 +52,9 @@ Frontend (SvelteKit SPA)
 | `src-tauri/src/lib.rs` | Plugin-Initialisierung, Tauri Commands |
 | `src-tauri/src/update.rs` | Update-Logik, Critical-Flag-Erkennung |
 | `src-tauri/tauri.conf.json` | App-Konfiguration, Updater-Endpoint (Gist) |
-| `scripts/release.js` | Automatisierte Release-Pipeline |
+| `scripts/release.js` | Lokales Skript: Version-Bump + Git-Tag-Push |
+| `scripts/update-gist.js` | CI-Skript: Gist-Update nach Build |
+| `.github/workflows/release.yml` | GitHub Actions: Build + Sign + Release + Gist |
 
 ## Tauri Commands & Events
 
@@ -61,25 +63,33 @@ Frontend (SvelteKit SPA)
 - `install_update()` → `Result<(), String>`
 
 **Events (Rust → Frontend)**:
-- `"update-progress"` → `{ event: "downloading", chunk_length, content_length }`
+- `"update-progress"` → `{ downloaded, total, percent }` (echter Prozentsatz)
 - `"update-complete"` → `{}`
 
 ## Release-Pipeline
 
-`scripts/release.js` führt folgendes aus:
-1. Version-Bump in `package.json`, `tauri.conf.json`, `Cargo.toml`
-2. `pnpm tauri build` → signierter NSIS-Installer (.exe) + `.sig`-Datei
-3. GitHub Release mit Tag `v{VERSION}` erstellen und Artefakte hochladen
-4. GitHub Gist (`latest.json`) mit neuer Version, Signatur und `critical`-Flag aktualisieren
-
-**Benötigte `.env`-Variablen**:
+### Lokaler Aufruf
+```bash
+pnpm release 1.0.2          # → pusht Tag v1.0.2
+pnpm release 1.0.2 true     # → pusht Tag v1.0.2-critical
 ```
-GITHUB_TOKEN=         # Personal Access Token (repo + gist Scopes)
-GIST_ID=              # ID des Gists mit latest.json
-REPO_OWNER=           # GitHub-Benutzername
-REPO_NAME=            # Repository-Name
-TAURI_SIGNING_PRIVATE_KEY=   # Minisign-Key (einzeilig mit \n-Escaping!)
-TAURI_SIGNING_KEY_PASSWORD=  # Optional
+
+`scripts/release.js` macht nur:
+1. Version-Bump in `package.json`, `tauri.conf.json`, `Cargo.toml`
+2. `git commit` + `git tag` + `git push`
+
+### GitHub Actions (`.github/workflows/release.yml`)
+Startet automatisch beim Tag-Push und führt aus:
+1. Rust-Build + NSIS-Installer signieren (`TAURI_SIGNING_PRIVATE_KEY`)
+2. GitHub Release erstellen + Assets hochladen
+3. Gist (`latest.json`) aktualisieren via `scripts/update-gist.js`
+
+**Benötigte GitHub Secrets**:
+```
+TAURI_SIGNING_PRIVATE_KEY   # Minisign-Key (mehrzeilig, direkt einfügen)
+TAURI_SIGNING_KEY_PASSWORD  # Optional
+GIST_TOKEN                  # PAT mit "gist" Scope
+GIST_ID                     # ID des Gists mit latest.json
 ```
 
 ## Critical Update Erkennung
