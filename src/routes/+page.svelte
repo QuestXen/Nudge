@@ -3,6 +3,7 @@
   import { cubicOut } from "svelte/easing";
   import { goto } from "$app/navigation";
   import ReminderCard from "$lib/components/ReminderCard.svelte";
+  import NudgeLogo from "$lib/components/NudgeLogo.svelte";
 
   interface Reminder {
     id: string;
@@ -14,13 +15,7 @@
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
-  let reminders = $state<Reminder[]>([
-    { id: "1", title: "Stand-up Meeting",  time: "09:00", description: "Daily sync mit dem Team",            priority: "high",   done: false },
-    { id: "2", title: "Design Review",     time: "11:30", description: "UI Mockups mit Product besprechen",  priority: "medium", done: false },
-    { id: "3", title: "Mittagspause",      time: "12:30",                                                    priority: "low",    done: false },
-    { id: "4", title: "PR Review",         time: "15:00", description: "Feature Branch reviewen",            priority: "medium", done: false },
-    { id: "5", title: "Deploy Staging",    time: "17:00", description: "Release Candidate pushen",           priority: "high",   done: false },
-  ]);
+  let reminders = $state<Reminder[]>([]);
 
   let showModal   = $state(false);
   let newTitle    = $state("");
@@ -91,6 +86,7 @@
   <!-- ── Header ──────────────────────────────────────────────────────────── -->
   <header class="flex items-center justify-between px-4 h-12 border-b border-zinc-800 shrink-0">
     <div class="flex items-center gap-2">
+      <NudgeLogo size={16} />
       <span class="text-sm font-semibold tracking-tight text-white">nudge</span>
     </div>
 
@@ -139,14 +135,26 @@
   <main class="flex-1 overflow-y-auto px-4 pb-4" aria-label="Erinnerungen">
 
     {#if active.length === 0}
-      <div class="flex flex-col items-center justify-center h-40 text-center border border-zinc-800 rounded-lg"
+      <div class="flex flex-col items-center justify-center h-48 text-center gap-3"
            in:fade={{ duration: 200 }}>
-        <p class="text-sm text-zinc-500">Keine offenen Erinnerungen</p>
-        <p class="text-xs text-zinc-700 mt-1">
-          <button onclick={openModal} class="underline cursor-pointer hover:text-zinc-500 transition-colors duration-150">
-            Erinnerung hinzufügen
-          </button>
-        </p>
+        <div class="flex items-center justify-center w-10 h-10 rounded-xl border border-zinc-800 bg-zinc-900">
+          <NudgeLogo size={18} />
+        </div>
+        <div>
+          <p class="text-sm text-zinc-400 font-medium">Noch keine Erinnerungen</p>
+          <p class="text-xs text-zinc-600 mt-0.5">Füge deine erste Erinnerung hinzu</p>
+        </div>
+        <button
+          onclick={openModal}
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer
+                 bg-zinc-900 border border-zinc-800 text-zinc-400
+                 hover:bg-zinc-800 hover:text-zinc-200 hover:border-zinc-700 transition-colors duration-150"
+        >
+          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"/>
+          </svg>
+          Hinzufügen
+        </button>
       </div>
     {:else}
       <div class="border border-zinc-800 rounded-lg overflow-hidden divide-y divide-zinc-800">
