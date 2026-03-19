@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release:
     runs-on: windows-latest
@@ -121,8 +124,7 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           VERSION: ${{ steps.tag.outputs.version }}
           TAG: ${{ steps.tag.outputs.tag }}
-          # ZIP_NAME → Tauri-Updater lädt .nsis.zip, nicht .exe
-          ZIP_NAME: ${{ steps.artifacts.outputs.zip_name }}
+          INSTALLER_NAME: ${{ steps.artifacts.outputs.installer_name }}
           CRITICAL: ${{ steps.tag.outputs.critical }}
           SIG_PATH: ${{ steps.artifacts.outputs.sig }}
         run: node scripts/update-gist.js

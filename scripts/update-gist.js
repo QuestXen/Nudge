@@ -1,14 +1,14 @@
 /**
  * Wird von GitHub Actions aufgerufen um latest.json im Gist zu aktualisieren.
  *
- * Tauri v2 NSIS Update-Mechanismus:
- *   - Der Updater lädt .nsis.zip herunter (NICHT die .exe)
- *   - Die Signatur ist der Inhalt von .nsis.zip.sig
- *   - Die URL in latest.json muss auf .nsis.zip zeigen
+ * Tauri v2 NSIS Update-Mechanismus (createUpdaterArtifacts: true):
+ *   - Der Updater lädt die .exe herunter
+ *   - Die Signatur ist der Inhalt von .exe.sig
+ *   - Die URL in latest.json muss auf die .exe zeigen
  *
  * Benötigte Env-Variablen:
  *   GIST_TOKEN, GIST_ID, REPO_OWNER, REPO_NAME,
- *   VERSION, TAG, ZIP_NAME, CRITICAL, SIG_PATH
+ *   VERSION, TAG, INSTALLER_NAME, CRITICAL, SIG_PATH
  */
 import { Octokit } from "@octokit/rest";
 import fs from "fs-extra";
@@ -20,12 +20,12 @@ const {
   REPO_NAME,
   VERSION,
   TAG,
-  ZIP_NAME,   // .nsis.zip filename — Tauri-Updater URL
+  INSTALLER_NAME, // .exe filename — Tauri-Updater URL
   CRITICAL,
-  SIG_PATH,   // Pfad zur .nsis.zip.sig Datei
+  SIG_PATH,       // Pfad zur .exe.sig Datei
 } = process.env;
 
-const missing = ["GIST_TOKEN", "GIST_ID", "REPO_OWNER", "REPO_NAME", "VERSION", "TAG", "ZIP_NAME", "SIG_PATH"]
+const missing = ["GIST_TOKEN", "GIST_ID", "REPO_OWNER", "REPO_NAME", "VERSION", "TAG", "INSTALLER_NAME", "SIG_PATH"]
   .filter((key) => !process.env[key]);
 
 if (missing.length > 0) {
@@ -35,10 +35,10 @@ if (missing.length > 0) {
 
 const isCritical = CRITICAL === "true";
 
-// Tauri-Updater erwartet die .nsis.zip URL (nicht die .exe!)
-const updateUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG}/${ZIP_NAME}`;
+// Tauri-Updater lädt die .exe herunter und prüft mit .exe.sig
+const updateUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG}/${INSTALLER_NAME}`;
 
-// Signatur = Inhalt der .nsis.zip.sig Datei
+// Signatur = Inhalt der .exe.sig Datei
 const signature = await fs.readFile(SIG_PATH, "utf8");
 
 const notes = isCritical
@@ -52,7 +52,7 @@ const latestJson = {
   platforms: {
     "windows-x86_64": {
       signature: signature.trim(),
-      url: updateUrl,         // .nsis.zip URL für den Updater
+      url: updateUrl,         // .exe URL für den Updater
     },
   },
 };
