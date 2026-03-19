@@ -5,6 +5,7 @@
   import { fade } from "svelte/transition";
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
+  import { initLanguage } from "$lib/i18n.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -63,6 +64,8 @@
   let unlistenComplete: (() => void) | undefined;
 
   onMount(async () => {
+    await initLanguage();
+
     unlistenProgress = await listen<ProgressPayload>("update-progress", (e) => {
       installProgress = Math.min(Math.round(e.payload.percent), 99);
     });

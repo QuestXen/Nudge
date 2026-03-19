@@ -3,7 +3,7 @@
   import { cubicOut } from "svelte/easing";
   import { goto } from "$app/navigation";
   import ReminderCard from "$lib/components/ReminderCard.svelte";
-  import NudgeLogo from "$lib/components/NudgeLogo.svelte";
+  import { t, getLanguage } from "$lib/i18n.svelte";
 
   interface Reminder {
     id: string;
@@ -32,9 +32,9 @@
   const canSave    = $derived(newTitle.trim().length > 0 && newTime.length > 0);
 
   const today = new Date();
-  const dateLabel = today.toLocaleDateString("de-DE", {
-    weekday: "long", day: "numeric", month: "long",
-  });
+  const locale = $derived(getLanguage() === "en" ? "en-GB" : "de-DE");
+  const dateWeekday = $derived(today.toLocaleDateString(locale, { weekday: "long" }));
+  const dateDay     = $derived(today.toLocaleDateString(locale, { day: "numeric", month: "long" }));
 
   // ── Actions ────────────────────────────────────────────────────────────────
   function completeReminder(id: string) {
@@ -74,91 +74,78 @@
     newTitle = ""; newTime = ""; newDesc = ""; newPriority = "medium";
   }
 
-  const priorities: { value: "low" | "medium" | "high"; label: string }[] = [
-    { value: "low",    label: "Niedrig" },
-    { value: "medium", label: "Mittel"  },
-    { value: "high",   label: "Hoch"    },
-  ];
+  const priorities = $derived<{ value: "low" | "medium" | "high"; label: string }[]>([
+    { value: "low",    label: t().priorityLow    },
+    { value: "medium", label: t().priorityMedium },
+    { value: "high",   label: t().priorityHigh   },
+  ]);
 </script>
 
 <div class="flex flex-col h-screen">
 
   <!-- ── Header ──────────────────────────────────────────────────────────── -->
-  <header class="flex items-center justify-between px-4 h-12 border-b border-zinc-800 shrink-0">
-    <div class="flex items-center gap-2">
-      <NudgeLogo size={16} />
-      <span class="text-sm font-semibold tracking-tight text-white">nudge</span>
+  <header class="grid grid-cols-[1fr_auto_1fr] items-center px-4 h-14 border-b border-zinc-800/60 shrink-0">
+
+    <!-- Left: app name -->
+    <span class="text-xs font-semibold tracking-[0.15em] uppercase text-zinc-500">nudge</span>
+
+    <!-- Center: date -->
+    <div class="flex flex-col items-center leading-none gap-0.5">
+      <span class="text-[10px] font-medium tracking-widest uppercase text-zinc-600">{dateWeekday}</span>
+      <span class="text-sm font-semibold text-zinc-200 tracking-tight">{dateDay}</span>
     </div>
 
-    <div class="flex items-center gap-1.5">
-      <!-- Add button -->
-      <button
-        onclick={openModal}
-        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer
-               text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 transition-all duration-200"
-        aria-label="Neue Erinnerung"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
-        Hinzufügen
-      </button>
-
-      <!-- Settings -->
+    <!-- Right: settings -->
+    <div class="flex justify-end">
       <button
         onclick={() => goto("/settings")}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-zinc-500 cursor-pointer
-               hover:text-zinc-100 hover:bg-zinc-800/50 transition-all duration-200"
-        aria-label="Einstellungen"
+        class="flex items-center justify-center w-8 h-8 rounded-lg text-zinc-600 cursor-pointer
+               hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-150"
+        aria-label={t().settings}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
       </button>
     </div>
   </header>
 
-  <!-- ── Section label ───────────────────────────────────────────────────── -->
-  <div class="flex items-center justify-between px-4 py-2.5 shrink-0">
-    <span class="text-xs font-medium text-zinc-500 uppercase tracking-widest">Heute</span>
-    <div class="flex items-center gap-2 text-xs text-zinc-600">
+  <!-- ── Stats bar ────────────────────────────────────────────────────────── -->
+  {#if reminders.length > 0}
+    <div class="flex items-center justify-center gap-3 px-4 py-2 shrink-0"
+         in:fade={{ duration: 150 }}>
+      <span class="text-xs text-zinc-600">{active.length} {t().open}</span>
       {#if doneCount > 0}
-        <span>{doneCount} erledigt</span>
-        <span>·</span>
+        <span class="w-px h-3 bg-zinc-800"></span>
+        <span class="text-xs text-zinc-700">{doneCount} {t().done}</span>
       {/if}
-      <span>{active.length} offen</span>
     </div>
-  </div>
+  {/if}
 
   <!-- ── List ────────────────────────────────────────────────────────────── -->
-  <main class="flex-1 overflow-y-auto px-4 pb-4" aria-label="Erinnerungen">
+  <main class="flex-1 overflow-y-auto px-4 pb-20" aria-label="Erinnerungen">
 
     {#if active.length === 0}
-      <div class="flex flex-col items-center justify-center h-48 text-center gap-3"
+      <div class="flex flex-col items-center justify-center h-full text-center gap-4 pb-8"
            in:fade={{ duration: 200 }}>
-        <div class="flex items-center justify-center w-10 h-10 rounded-xl border border-zinc-800 bg-zinc-900">
-          <NudgeLogo size={18} />
+        <!-- Pulsing ring hint -->
+        <div class="relative flex items-center justify-center">
+          <div class="absolute w-16 h-16 rounded-full border border-zinc-800 animate-ping opacity-20"></div>
+          <div class="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-600">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </div>
         </div>
         <div>
-          <p class="text-sm text-zinc-400 font-medium">Noch keine Erinnerungen</p>
-          <p class="text-xs text-zinc-600 mt-0.5">Füge deine erste Erinnerung hinzu</p>
+          <p class="text-sm font-medium text-zinc-300">{t().noReminders}</p>
+          <p class="text-xs text-zinc-600 mt-1">{t().noRemindersHint}</p>
         </div>
-        <button
-          onclick={openModal}
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer
-                 bg-white text-zinc-900 hover:bg-zinc-200 transition-colors duration-150"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          Hinzufügen
-        </button>
       </div>
     {:else}
-      <div class="border border-zinc-800 rounded-lg overflow-hidden divide-y divide-zinc-800">
+      <div class="border border-zinc-800 rounded-lg overflow-hidden divide-y divide-zinc-800 mt-1">
         {#each active as reminder (reminder.id)}
           <ReminderCard
             {reminder}
@@ -170,6 +157,24 @@
     {/if}
 
   </main>
+
+  <!-- ── Sticky bottom bar ─────────────────────────────────────────────────── -->
+  <div class="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-2 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none">
+    <button
+      onclick={openModal}
+      class="pointer-events-auto w-full flex items-center justify-center gap-2 py-3 rounded-xl
+             bg-white text-zinc-900 font-medium text-sm cursor-pointer
+             hover:bg-zinc-100 active:scale-[0.98]
+             transition-all duration-150 shadow-lg shadow-black/30"
+      aria-label={t().add}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      {t().add}
+    </button>
+  </div>
 
 </div>
 
@@ -200,7 +205,7 @@
     >
       <!-- Handle + title -->
       <div class="flex items-center justify-between mb-4">
-        <span class="text-sm font-medium text-zinc-100">Neue Erinnerung</span>
+        <span class="text-sm font-medium text-zinc-100">{t().newReminder}</span>
         <button
           onclick={closeModal}
           class="flex items-center justify-center w-6 h-6 rounded-md text-zinc-600 cursor-pointer
@@ -220,7 +225,7 @@
           bind:this={titleInput}
           bind:value={newTitle}
           type="text"
-          placeholder="Was möchtest du nicht vergessen?"
+          placeholder={t().titlePlaceholder}
           maxlength="80"
           class="w-full px-3 py-2 rounded-md text-sm bg-zinc-900 border border-zinc-800 text-zinc-100
                  placeholder:text-zinc-600 outline-none
@@ -260,7 +265,7 @@
         <input
           bind:value={newDesc}
           type="text"
-          placeholder="Beschreibung (optional)"
+          placeholder={t().descPlaceholder}
           maxlength="120"
           class="w-full px-3 py-2 rounded-md text-sm bg-zinc-900 border border-zinc-800 text-zinc-100
                  placeholder:text-zinc-600 outline-none
@@ -278,7 +283,7 @@
                  bg-zinc-900 border border-zinc-800
                  hover:bg-zinc-800 hover:text-zinc-300 transition-colors duration-150"
         >
-          Abbrechen
+          {t().cancel}
         </button>
         <button
           onclick={addReminder}
@@ -289,7 +294,7 @@
                    : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}"
           aria-disabled={!canSave}
         >
-          Hinzufügen
+          {t().save}
         </button>
       </div>
     </div>
