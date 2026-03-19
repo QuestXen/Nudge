@@ -25,6 +25,13 @@ if (!version || !semver.valid(version)) {
 const isCritical = criticalArg === "true";
 const tag = isCritical ? `v${version}-critical` : `v${version}`;
 
+// Prüfen ob Tag schon existiert
+const existingTags = execSync("git tag", { cwd: root }).toString().split("\n");
+if (existingTags.includes(tag)) {
+  console.error(`❌ Tag '${tag}' existiert bereits lokal. Lösche ihn zuerst mit:\n   git tag -d ${tag}`);
+  process.exit(1);
+}
+
 console.log(`🚀 Release v${version}${isCritical ? " (KRITISCH)" : ""}`);
 console.log(`🏷️  Tag: ${tag}`);
 
@@ -70,7 +77,14 @@ function run(cmd) {
 
 console.log("\n📦 Git-Commit und Tag werden erstellt...");
 run("git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml");
-run(`git commit -m "chore: release v${version}"`);
+
+const staged = execSync("git diff --cached --name-only", { cwd: root }).toString().trim();
+if (staged.length > 0) {
+  run(`git commit -m "chore: release v${version}"`);
+} else {
+  console.log("  ℹ️  Keine Versionsänderung – überspringe Commit");
+}
+
 run(`git tag ${tag}`);
 
 console.log("\n⬆️  Push zu GitHub...");
