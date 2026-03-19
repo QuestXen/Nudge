@@ -95,12 +95,12 @@
       <button
         onclick={openModal}
         class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer
-               bg-zinc-900 border border-zinc-800 text-zinc-400
-               hover:bg-zinc-800 hover:text-zinc-200 hover:border-zinc-700 transition-colors duration-150"
+               text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50 transition-all duration-200"
         aria-label="Neue Erinnerung"
       >
-        <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
         Hinzufügen
       </button>
@@ -108,12 +108,13 @@
       <!-- Settings -->
       <button
         onclick={() => goto("/settings")}
-        class="flex items-center justify-center w-7 h-7 rounded-md text-zinc-600 cursor-pointer
-               hover:text-zinc-300 hover:bg-zinc-800 transition-colors duration-150"
+        class="flex items-center justify-center w-7 h-7 rounded-md text-zinc-500 cursor-pointer
+               hover:text-zinc-100 hover:bg-zinc-800/50 transition-all duration-200"
         aria-label="Einstellungen"
       >
-        <svg class="w-4 h-4" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.018.066.079.158.212.224.231.114.454.243.668.386.123.082.233.09.299.071l1.103-.303c.644-.176 1.392.021 1.82.63.27.385.506.792.704 1.218.315.675.111 1.422-.364 1.891l-.814.806c-.049.048-.098.147-.088.294.016.257.016.515 0 .772-.01.147.038.246.088.294l.814.806c.475.469.679 1.216.364 1.891a7.977 7.977 0 0 1-.704 1.217c-.428.61-1.176.807-1.82.63l-1.102-.302c-.067-.019-.177-.011-.3.071a5.909 5.909 0 0 1-.668.386c-.133.066-.194.158-.211.224l-.29 1.106c-.168.646-.715 1.196-1.458 1.26a8.006 8.006 0 0 1-1.402 0c-.743-.064-1.289-.614-1.458-1.26l-.289-1.106c-.018-.066-.079-.158-.212-.224a5.738 5.738 0 0 1-.668-.386c-.123-.082-.233-.09-.299-.071l-1.103.303c-.644.176-1.392-.021-1.82-.63a8.12 8.12 0 0 1-.704-1.218c-.315-.675-.111-1.422.363-1.891l.815-.806c.05-.048.098-.147.088-.294a6.214 6.214 0 0 1 0-.772c.01-.147-.038-.246-.088-.294l-.815-.806C.635 6.045.431 5.298.746 4.623a7.92 7.92 0 0 1 .704-1.217c.428-.61 1.176-.807 1.82-.63l1.102.302c.067.019.177.011.3-.071.214-.143.437-.272.668-.386.133-.066.194-.158.211-.224l.29-1.106C6.257.646 6.854.095 7.599.03 7.732.01 7.866 0 8 0Zm-.571 1.525c-.036.003-.108.036-.137.146l-.289 1.107c-.072.277-.27.543-.567.705-.02.01-.041.022-.062.033a4.249 4.249 0 0 0-.498.29c-.283.19-.570.339-.887.409l-1.102-.303c-.109-.03-.175.016-.195.045-.22.312-.412.644-.573.99-.014.031-.021.11.059.19l.815.806c.203.2.332.492.308.787a5.092 5.092 0 0 0 0 .562c.024.295-.105.588-.308.788l-.815.806c-.08.08-.073.159-.059.19.162.346.353.677.573.989.02.03.085.076.195.046l1.102-.303c.317-.07.604.019.887.409.158.107.32.206.498.29l.062.033c.296.162.495.428.567.705l.289 1.107c.029.109.101.143.137.146a6.6 6.6 0 0 0 1.142 0c.036-.003.108-.036.137-.146l.289-1.107c.072-.277.27-.543.567-.705.02-.01.041-.022.062-.033.179-.085.34-.184.498-.29.283-.19.57-.339.887-.409l1.102.303c.11.03.175-.016.195-.045.22-.313.413-.644.573-.99.014-.031.021-.11-.059-.19l-.815-.806c-.203-.2-.332-.492-.308-.787a5.092 5.092 0 0 0 0-.562c-.024-.295.105-.588.308-.788l.815-.806c.08-.08.073-.159.059-.19a6.464 6.464 0 0 0-.573-.989c-.02-.03-.085-.076-.195-.046l-1.102.303c-.317.07-.604-.019-.887-.409a4.834 4.834 0 0 0-.498-.29l-.062-.033c-.296-.162-.495-.428-.567-.705L8.704 1.67c-.029-.11-.101-.143-.137-.146a6.6 6.6 0 0 0-1.142 0ZM8 5.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
       </button>
     </div>
@@ -146,12 +147,12 @@
         </div>
         <button
           onclick={openModal}
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer
-                 bg-zinc-900 border border-zinc-800 text-zinc-400
-                 hover:bg-zinc-800 hover:text-zinc-200 hover:border-zinc-700 transition-colors duration-150"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer
+                 bg-white text-zinc-900 hover:bg-zinc-200 transition-colors duration-150"
         >
-          <svg class="w-3 h-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
           Hinzufügen
         </button>
