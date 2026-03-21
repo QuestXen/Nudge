@@ -7,6 +7,7 @@ use update::PendingUpdate;
 pub fn run() {
     tauri::Builder::default()
         .manage(PendingUpdate(Mutex::new(None)))
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_updater::Builder::new().build())

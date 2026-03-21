@@ -12,9 +12,9 @@
   aria-hidden="true"
 >
   <defs>
-    <linearGradient id="nudge-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#fafafa" />
-      <stop offset="100%" stop-color="#a1a1aa" />
+    <linearGradient id="nudge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d0bcff" />
+      <stop offset="100%" stop-color="#7a49e4" />
     </linearGradient>
   </defs>
 
@@ -37,8 +37,8 @@
   />
 
   <!-- Clapper dot -->
-  <circle cx="12" cy="17" r="1" fill="#fafafa" />
+  <circle cx="12" cy="17" r="1" fill="#d0bcff" />
 
   <!-- Top stem -->
-  <path d="M12 2V4" stroke="#71717a" stroke-width="1.5" stroke-linecap="round" />
+  <path d="M12 2V4" stroke="#7a49e4" stroke-width="1.5" stroke-linecap="round" />
 </svg>

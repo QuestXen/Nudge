@@ -1,77 +1,119 @@
 <script lang="ts">
-  import { fade, fly } from "svelte/transition";
+  import { fade, scale } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
-  import { goto } from "$app/navigation";
   import ReminderCard from "$lib/components/ReminderCard.svelte";
-  import { t, getLanguage } from "$lib/i18n.svelte";
+  import { t } from "$lib/i18n.svelte";
+  import { ui } from "$lib/ui.svelte";
+  import { reminderStore, saveReminders, updateStreak } from "$lib/reminders.svelte";
+  import { computeNextTrigger } from "$lib/reminder-utils";
+  import type { ReminderType, IntervalUnit } from "$lib/reminders.svelte";
 
-  interface Reminder {
-    id: string;
-    title: string;
-    time: string;
-    description?: string;
-    priority: "low" | "medium" | "high";
-    done: boolean;
+  // ── Derived from shared store ──────────────────────────────────────────────
+  const active = $derived(
+    reminderStore.reminders
+      .filter((r) => !r.done)
+      .sort((a, b) => {
+        const ta = a.nextTrigger ?? `${a.date ?? "9999-99-99"}T${a.time}`;
+        const tb = b.nextTrigger ?? `${b.date ?? "9999-99-99"}T${b.time}`;
+        return ta.localeCompare(tb);
+      })
+  );
+  const doneCount = $derived(reminderStore.reminders.filter((r) => r.done).length);
+  const openCount = $derived(active.length);
+
+  // ── Modal form state ───────────────────────────────────────────────────────
+  let newType      = $state<ReminderType>("once-today");
+  let newTitle     = $state("");
+  let newTime      = $state("");
+  let newDate      = $state("");
+  let newWeekdays      = $state<number[]>([]);
+  let newIntervalValue = $state(1);
+  let newIntervalUnit  = $state<IntervalUnit>("hours");
+  let newDesc      = $state("");
+  let newPriority  = $state<"low" | "medium" | "high">("medium");
+  let newCategoryId = $state<string | undefined>(undefined);
+  let titleInput   = $state<HTMLInputElement | null>(null);
+
+  const canSave = $derived(
+    newTitle.trim().length > 0 &&
+    (newType === "interval" || newTime.length > 0) &&
+    (newType !== "once-future" || newDate.length > 0) &&
+    (newType !== "weekly" || newWeekdays.length > 0)
+  );
+
+  // ── Modal sync ────────────────────────────────────────────────────────────
+  $effect(() => {
+    if (ui.showAddModal) setTimeout(() => titleInput?.focus(), 60);
+  });
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  function completeReminder(id: string) {
+    const r = reminderStore.reminders.find((r) => r.id === id);
+    if (!r) return;
+
+    if (r.type === "once-today" || r.type === "once-future") {
+      // One-time: permanently done
+      r.done = true;
+    } else {
+      // Recurring (daily/weekly/interval): advance to next occurrence — never permanently done
+      r.lastTriggered = new Date().toISOString();
+      r.nextTrigger   = computeNextTrigger(r);
+    }
+    updateStreak();
+    saveReminders();
   }
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let reminders = $state<Reminder[]>([]);
-
-  let showModal   = $state(false);
-  let newTitle    = $state("");
-  let newTime     = $state("");
-  let newDesc     = $state("");
-  let newPriority = $state<"low" | "medium" | "high">("medium");
-  let titleInput  = $state<HTMLInputElement | null>(null);
-
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const active = $derived(
-    reminders.filter((r) => !r.done).sort((a, b) => a.time.localeCompare(b.time))
-  );
-  const doneCount  = $derived(reminders.filter((r) => r.done).length);
-  const canSave    = $derived(newTitle.trim().length > 0 && newTime.length > 0);
-
-  const today = new Date();
-  const locale = $derived(getLanguage() === "en" ? "en-GB" : "de-DE");
-  const dateWeekday = $derived(today.toLocaleDateString(locale, { weekday: "long" }));
-  const dateDay     = $derived(today.toLocaleDateString(locale, { day: "numeric", month: "long" }));
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-  function completeReminder(id: string) {
-    const r = reminders.find((r) => r.id === id);
-    if (r) r.done = true;
+  function deleteReminder(id: string) {
+    const idx = reminderStore.reminders.findIndex((r) => r.id === id);
+    if (idx !== -1) reminderStore.reminders.splice(idx, 1);
+    saveReminders();
   }
 
   function snoozeReminder(id: string) {
-    const r = reminders.find((r) => r.id === id);
+    const r = reminderStore.reminders.find((r) => r.id === id);
     if (!r) return;
-    const [h, m] = r.time.split(":").map(Number);
-    const d = new Date();
-    d.setHours(h, m + 15, 0, 0);
-    r.time = d.toTimeString().slice(0, 5);
+    // Push nextTrigger directly — never earlier than now
+    const base = r.nextTrigger ? new Date(r.nextTrigger) : new Date();
+    const now  = new Date();
+    r.nextTrigger = new Date(Math.max(base.getTime(), now.getTime()) + 15 * 60_000).toISOString();
+    saveReminders();
   }
 
   function addReminder() {
     if (!canSave) return;
-    reminders.push({
-      id: crypto.randomUUID(),
-      title: newTitle.trim(),
-      time: newTime,
+    const now = new Date();
+    const base = {
+      id:          crypto.randomUUID(),
+      title:       newTitle.trim(),
       description: newDesc.trim() || undefined,
-      priority: newPriority,
-      done: false,
-    });
+      priority:    newPriority,
+      categoryId:  newCategoryId,
+      done:        false,
+      createdAt:   now.toISOString(),
+      type:        newType,
+      time:        newTime || "09:00",
+      date:        newType === "once-future" ? newDate : undefined,
+      weekdays:      newType === "weekly"   ? [...newWeekdays]   : undefined,
+      intervalValue: newType === "interval" ? newIntervalValue  : undefined,
+      intervalUnit:  newType === "interval" ? newIntervalUnit   : undefined,
+    };
+    const nextTrigger = computeNextTrigger(base as Parameters<typeof computeNextTrigger>[0]);
+    reminderStore.reminders.push({ ...base, nextTrigger });
+    saveReminders();
     closeModal();
   }
 
-  function openModal() {
-    showModal = true;
-    setTimeout(() => titleInput?.focus(), 60);
+  function closeModal() {
+    ui.showAddModal = false;
+    newType = "once-today"; newTitle = ""; newTime = ""; newDate = "";
+    newWeekdays = []; newIntervalValue = 1; newIntervalUnit = "hours"; newDesc = ""; newPriority = "medium";
+    newCategoryId = undefined;
   }
 
-  function closeModal() {
-    showModal = false;
-    newTitle = ""; newTime = ""; newDesc = ""; newPriority = "medium";
+  function toggleWeekday(d: number) {
+    const idx = newWeekdays.indexOf(d);
+    if (idx === -1) newWeekdays.push(d);
+    else            newWeekdays.splice(idx, 1);
   }
 
   const priorities = $derived<{ value: "low" | "medium" | "high"; label: string }[]>([
@@ -79,107 +121,98 @@
     { value: "medium", label: t().priorityMedium },
     { value: "high",   label: t().priorityHigh   },
   ]);
+
+  const types: { value: ReminderType; label: () => string }[] = [
+    { value: "once-today",  label: () => t().typeOnceToday  },
+    { value: "once-future", label: () => t().typeOnceFuture },
+    { value: "daily",       label: () => t().typeDaily      },
+    { value: "weekly",      label: () => t().typeWeekly     },
+    { value: "interval",    label: () => t().typeInterval   },
+  ];
+
+  const weekdays = $derived([
+    { value: 0, label: t().weekMon },
+    { value: 1, label: t().weekTue },
+    { value: 2, label: t().weekWed },
+    { value: 3, label: t().weekThu },
+    { value: 4, label: t().weekFri },
+    { value: 5, label: t().weekSat },
+    { value: 6, label: t().weekSun },
+  ]);
+
+  const intervalUnits: { value: IntervalUnit; label: () => string }[] = [
+    { value: "hours",    label: () => t().iuHours    },
+    { value: "days",     label: () => t().iuDays     },
+    { value: "weeks",    label: () => t().iuWeeks    },
+    { value: "months",   label: () => t().iuMonths   },
+    { value: "quarters", label: () => t().iuQuarters },
+    { value: "years",    label: () => t().iuYears    },
+  ];
+
+  const typeIcons: Record<ReminderType, string> = {
+    "once-today":  "today",
+    "once-future": "event",
+    "daily":       "autorenew",
+    "weekly":      "date_range",
+    "interval":    "timer",
+  };
+
+  const currentTypeLabel = $derived(types.find(tp => tp.value === newType)?.label() ?? "");
 </script>
 
-<div class="flex flex-col h-screen">
+<!-- ── Main Content ──────────────────────────────────────────────────────── -->
+<div class="flex flex-col h-full overflow-hidden">
 
-  <!-- ── Header ──────────────────────────────────────────────────────────── -->
-  <header class="grid grid-cols-[1fr_auto_1fr] items-center px-4 h-14 border-b border-zinc-800/60 shrink-0">
-
-    <!-- Left: app name -->
-    <span class="text-xs font-semibold tracking-[0.15em] uppercase text-zinc-500">nudge</span>
-
-    <!-- Center: date -->
-    <div class="flex flex-col items-center leading-none gap-0.5">
-      <span class="text-[10px] font-medium tracking-widest uppercase text-zinc-600">{dateWeekday}</span>
-      <span class="text-sm font-semibold text-zinc-200 tracking-tight">{dateDay}</span>
-    </div>
-
-    <!-- Right: settings -->
-    <div class="flex justify-end">
-      <button
-        onclick={() => goto("/settings")}
-        class="flex items-center justify-center w-8 h-8 rounded-lg text-zinc-600 cursor-pointer
-               hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-150"
-        aria-label={t().settings}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </button>
-    </div>
+  <!-- Top Bar -->
+  <header class="flex justify-between items-center w-full px-8 py-5 bg-surface-container-low/60 shrink-0">
+    <h2 class="text-lg font-bold tracking-tight text-on-surface">{t().remindersTitle}</h2>
+    {#if reminderStore.reminders.length > 0}
+      <div class="flex items-center gap-2" in:fade={{ duration: 150 }}>
+        <span class="text-xs text-on-surface-variant">{openCount} {t().open}</span>
+        {#if doneCount > 0}
+          <span class="w-px h-3 bg-outline-variant/40"></span>
+          <span class="text-xs text-on-surface/30">{doneCount} {t().done}</span>
+        {/if}
+      </div>
+    {/if}
   </header>
 
-  <!-- ── Stats bar ────────────────────────────────────────────────────────── -->
-  {#if reminders.length > 0}
-    <div class="flex items-center justify-center gap-3 px-4 py-2 shrink-0"
-         in:fade={{ duration: 150 }}>
-      <span class="text-xs text-zinc-600">{active.length} {t().open}</span>
-      {#if doneCount > 0}
-        <span class="w-px h-3 bg-zinc-800"></span>
-        <span class="text-xs text-zinc-700">{doneCount} {t().done}</span>
-      {/if}
-    </div>
-  {/if}
-
-  <!-- ── List ────────────────────────────────────────────────────────────── -->
-  <main class="flex-1 overflow-y-auto px-4 pb-20" aria-label="Erinnerungen">
+  <!-- Reminder List -->
+  <main class="flex-1 overflow-y-auto px-8 py-6" aria-label="Erinnerungen">
 
     {#if active.length === 0}
       <div class="flex flex-col items-center justify-center h-full text-center gap-4 pb-8"
            in:fade={{ duration: 200 }}>
-        <!-- Pulsing ring hint -->
         <div class="relative flex items-center justify-center">
-          <div class="absolute w-16 h-16 rounded-full border border-zinc-800 animate-ping opacity-20"></div>
-          <div class="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-600">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
+          <div class="absolute w-16 h-16 rounded-full border border-primary/20 animate-ping opacity-30"></div>
+          <div class="w-12 h-12 rounded-full border border-outline-variant/20 bg-surface-container-low flex items-center justify-center">
+            <span class="material-symbols-outlined text-on-surface/30">notifications</span>
           </div>
         </div>
         <div>
-          <p class="text-sm font-medium text-zinc-300">{t().noReminders}</p>
-          <p class="text-xs text-zinc-600 mt-1">{t().noRemindersHint}</p>
+          <p class="text-sm font-medium text-on-surface/70">{t().noReminders}</p>
+          <p class="text-xs text-on-surface/30 mt-1">{t().noRemindersHint}</p>
         </div>
       </div>
     {:else}
-      <div class="border border-zinc-800 rounded-lg overflow-hidden divide-y divide-zinc-800 mt-1">
+      <div class="space-y-4">
         {#each active as reminder (reminder.id)}
           <ReminderCard
             {reminder}
+            category={reminderStore.categories.find(c => c.id === reminder.categoryId)}
             oncomplete={completeReminder}
             onsnooze={snoozeReminder}
+            ondelete={deleteReminder}
           />
         {/each}
       </div>
     {/if}
 
   </main>
-
-  <!-- ── Sticky bottom bar ─────────────────────────────────────────────────── -->
-  <div class="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-2 bg-gradient-to-t from-zinc-950 via-zinc-950/95 to-transparent pointer-events-none">
-    <button
-      onclick={openModal}
-      class="pointer-events-auto w-full flex items-center justify-center gap-2 py-3 rounded-xl
-             bg-white text-zinc-900 font-medium text-sm cursor-pointer
-             hover:bg-zinc-100 active:scale-[0.98]
-             transition-all duration-150 shadow-lg shadow-black/30"
-      aria-label={t().add}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-      {t().add}
-    </button>
-  </div>
-
 </div>
 
-<!-- ── Add Reminder Modal ──────────────────────────────────────────────────── -->
-{#if showModal}
+<!-- ── Add Reminder Modal ─────────────────────────────────────────────────── -->
+{#if ui.showAddModal}
   <!-- Backdrop -->
   <button
     class="fixed inset-0 z-40 w-full bg-black/60 cursor-default"
@@ -189,37 +222,141 @@
     transition:fade={{ duration: 150 }}
   ></button>
 
-  <!-- Sheet from bottom -->
+  <!-- Centered dialog -->
   <div
-    class="fixed inset-x-0 bottom-0 z-50 pointer-events-none"
+    class="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none"
     role="dialog"
     aria-modal="true"
     aria-label="Erinnerung hinzufügen"
-    transition:fade={{ duration: 100 }}
   >
     <div
-      class="pointer-events-auto mx-4 mb-4 rounded-xl border border-zinc-800 bg-zinc-950 p-5"
-      in:fly={{ y: 32, duration: 250, easing: cubicOut }}
-      out:fly={{ y: 32, duration: 180 }}
+      class="pointer-events-auto w-full max-w-[580px] flex rounded-2xl overflow-hidden
+             border border-outline-variant/15
+             shadow-[0_8px_60px_rgba(122,73,228,0.18),0_2px_24px_rgba(0,0,0,0.45)]"
+      in:scale={{ start: 0.97, duration: 220, easing: cubicOut }}
+      out:scale={{ start: 0.97, duration: 160 }}
       role="document"
     >
-      <!-- Handle + title -->
-      <div class="flex items-center justify-between mb-4">
-        <span class="text-sm font-medium text-zinc-100">{t().newReminder}</span>
-        <button
-          onclick={closeModal}
-          class="flex items-center justify-center w-6 h-6 rounded-md text-zinc-600 cursor-pointer
-                 hover:text-zinc-300 hover:bg-zinc-800 transition-colors duration-150"
-          aria-label="Abbrechen"
-        >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.06 1.06L9.06 8l3.22 3.22a.749.749 0 0 1-1.06 1.06L8 9.06l-3.22 3.22a.749.749 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
-          </svg>
-        </button>
+
+      <!-- ── Left Pane: Type + Scheduling ──────────────────────────────── -->
+      <div class="w-48 shrink-0 flex flex-col bg-surface-container-lowest/90 border-r border-outline-variant/10 p-4">
+
+        <!-- Type label -->
+        <span class="text-[0.6875rem] font-bold text-primary/60 uppercase tracking-widest mb-2.5">Typ</span>
+
+        <!-- Type radio list -->
+        <div class="flex flex-col gap-0.5">
+          {#each types as type}
+            <button
+              onclick={() => { newType = type.value; }}
+              class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-medium w-full text-left
+                     transition-colors duration-150 cursor-pointer
+                     {newType === type.value
+                       ? 'bg-primary/10 text-primary'
+                       : 'text-on-surface/50 hover:text-on-surface/80 hover:bg-surface-container-low/50'}"
+            >
+              <span
+                class="material-symbols-outlined shrink-0"
+                style="font-size:0.9375rem; font-variation-settings: 'FILL' {newType === type.value ? 1 : 0}, 'wght' 400"
+              >{typeIcons[type.value]}</span>
+              {type.label()}
+            </button>
+          {/each}
+        </div>
+
+        <!-- Scheduling area — fixed height prevents layout shift -->
+        <div class="mt-3 pt-3 border-t border-outline-variant/10 h-[152px] flex flex-col">
+          {#if newType === "once-future"}
+            <span class="text-[0.6875rem] font-bold text-on-surface/40 uppercase tracking-widest mb-2">
+              {t().dateLabel}
+            </span>
+            <input
+              bind:value={newDate}
+              type="date"
+              class="w-full px-2.5 py-1.5 rounded-lg text-xs bg-surface-container-low
+                     border border-outline-variant/15 text-on-surface outline-none
+                     focus:border-primary/40 transition-colors [color-scheme:dark] cursor-pointer"
+              aria-label={t().dateLabel}
+            />
+
+          {:else if newType === "weekly"}
+            <span class="text-[0.6875rem] font-bold text-on-surface/40 uppercase tracking-widest mb-2">
+              {t().weekdaysLabel}
+            </span>
+            <div class="grid grid-cols-4 gap-1">
+              {#each weekdays as wd}
+                <button
+                  onclick={() => toggleWeekday(wd.value)}
+                  class="py-1.5 text-xs font-semibold rounded-md transition-colors duration-150 cursor-pointer
+                         {newWeekdays.includes(wd.value)
+                           ? 'bg-primary-container text-on-primary-fixed'
+                           : 'bg-surface-container-low text-on-surface/40 hover:text-on-surface/70'}"
+                >{wd.label}</button>
+              {/each}
+            </div>
+
+          {:else if newType === "interval"}
+            <!-- Number input row -->
+            <div class="flex items-center gap-1.5 mb-2.5">
+              <span class="text-[0.6875rem] text-on-surface/40 whitespace-nowrap">{t().intervalLabel}</span>
+              <input
+                type="number"
+                min="1"
+                max="999"
+                bind:value={newIntervalValue}
+                class="w-14 px-2 py-1 rounded-md text-xs text-center font-mono bg-surface-container-low
+                       border border-outline-variant/15 text-on-surface outline-none
+                       focus:border-primary/40 transition-colors [appearance:textfield]
+                       [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+            <!-- Unit chips in 2×3 grid -->
+            <div class="grid grid-cols-3 gap-1">
+              {#each intervalUnits as u}
+                <button
+                  onclick={() => (newIntervalUnit = u.value)}
+                  class="py-1.5 text-[0.625rem] font-semibold rounded-md transition-colors duration-150 cursor-pointer leading-none
+                         {newIntervalUnit === u.value
+                           ? 'bg-primary-container text-on-primary-fixed'
+                           : 'bg-surface-container-low text-on-surface/40 hover:text-on-surface/70'}"
+                >{u.label()}</button>
+              {/each}
+            </div>
+
+          {:else}
+            <!-- once-today / daily — ambient placeholder -->
+            <div class="flex flex-col items-center justify-center flex-1 gap-2 opacity-20 pointer-events-none select-none">
+              <span class="material-symbols-outlined text-on-surface" style="font-size:2.25rem; font-variation-settings: 'FILL' 0">
+                {typeIcons[newType]}
+              </span>
+            </div>
+          {/if}
+        </div>
       </div>
 
-      <!-- Fields -->
-      <div class="space-y-2.5">
+      <!-- ── Right Pane: Stable form fields ────────────────────────────── -->
+      <div class="flex-1 flex flex-col bg-surface-container-low/80 backdrop-blur-xl p-5 min-w-0">
+
+        <!-- Header -->
+        <div class="flex items-start justify-between mb-4 shrink-0">
+          <div>
+            <h2 class="text-sm font-semibold text-on-surface">{t().newReminder}</h2>
+            <p class="text-[0.6875rem] font-bold text-primary/60 uppercase tracking-widest mt-0.5">
+              {currentTypeLabel}
+            </p>
+          </div>
+          <button
+            onclick={closeModal}
+            class="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface/30 cursor-pointer
+                   hover:text-on-surface hover:bg-surface-container-high transition-colors duration-150 shrink-0 ml-2"
+            aria-label="Abbrechen"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.06 1.06L9.06 8l3.22 3.22a.749.749 0 0 1-1.06 1.06L8 9.06l-3.22 3.22a.749.749 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>
+            </svg>
+          </button>
+        </div>
+
         <!-- Title -->
         <input
           bind:this={titleInput}
@@ -227,32 +364,45 @@
           type="text"
           placeholder={t().titlePlaceholder}
           maxlength="80"
-          class="w-full px-3 py-2 rounded-md text-sm bg-zinc-900 border border-zinc-800 text-zinc-100
-                 placeholder:text-zinc-600 outline-none
-                 focus:border-zinc-600 focus:bg-zinc-900 transition-colors duration-150"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-surface-container-highest border border-outline-variant/15
+                 text-on-surface placeholder:text-on-surface/30 outline-none
+                 focus:border-primary/40 transition-colors duration-150 shrink-0"
           onkeydown={(e) => e.key === "Enter" && canSave && addReminder()}
           aria-label="Titel"
         />
 
+        <!-- Description -->
+        <input
+          bind:value={newDesc}
+          type="text"
+          placeholder={t().descPlaceholder}
+          maxlength="120"
+          class="mt-2 w-full px-3 py-2 rounded-lg text-sm bg-surface-container-highest border border-outline-variant/15
+                 text-on-surface placeholder:text-on-surface/30 outline-none
+                 focus:border-primary/40 transition-colors duration-150 shrink-0"
+          onkeydown={(e) => e.key === "Enter" && canSave && addReminder()}
+          aria-label="Beschreibung"
+        />
+
         <!-- Time + Priority -->
-        <div class="flex gap-2">
+        <div class="mt-2 flex gap-2 shrink-0">
           <input
             bind:value={newTime}
             type="time"
-            class="flex-1 px-3 py-2 rounded-md text-sm font-mono bg-zinc-900 border border-zinc-800
-                   text-zinc-100 outline-none focus:border-zinc-600 transition-colors duration-150
-                   [color-scheme:dark] cursor-pointer"
-            aria-label="Uhrzeit"
+            class="flex-1 px-3 py-2 rounded-lg text-sm font-mono bg-surface-container-highest border border-outline-variant/15
+                   text-on-surface outline-none focus:border-primary/40 transition-all duration-150
+                   [color-scheme:dark] cursor-pointer
+                   {newType === 'interval' ? 'opacity-30 pointer-events-none' : ''}"
+            aria-label={t().timeLabel}
           />
-          <!-- Priority selector -->
-          <div class="flex rounded-md border border-zinc-800 overflow-hidden" role="group" aria-label="Priorität">
+          <div class="flex rounded-lg border border-outline-variant/15 overflow-hidden shrink-0" role="group" aria-label="Priorität">
             {#each priorities as p}
               <button
                 onclick={() => (newPriority = p.value)}
-                class="flex-1 px-3 py-2 text-xs transition-colors duration-150 cursor-pointer
+                class="px-3 py-2 text-xs font-semibold transition-colors duration-150 cursor-pointer whitespace-nowrap
                        {newPriority === p.value
-                         ? 'bg-zinc-100 text-zinc-900 font-medium'
-                         : 'bg-zinc-900 text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400'}"
+                         ? 'bg-primary-container text-on-primary-fixed'
+                         : 'bg-surface-container-highest text-on-surface/40 hover:text-on-surface/70'}"
                 aria-pressed={newPriority === p.value}
               >
                 {p.label}
@@ -261,42 +411,59 @@
           </div>
         </div>
 
-        <!-- Description -->
-        <input
-          bind:value={newDesc}
-          type="text"
-          placeholder={t().descPlaceholder}
-          maxlength="120"
-          class="w-full px-3 py-2 rounded-md text-sm bg-zinc-900 border border-zinc-800 text-zinc-100
-                 placeholder:text-zinc-600 outline-none
-                 focus:border-zinc-600 transition-colors duration-150"
-          onkeydown={(e) => e.key === "Enter" && canSave && addReminder()}
-          aria-label="Beschreibung"
-        />
+        <!-- Category selector -->
+        {#if reminderStore.categories.length > 0}
+          <div class="mt-2 flex gap-1.5 flex-wrap shrink-0">
+            <button
+              onclick={() => (newCategoryId = undefined)}
+              class="px-2.5 py-1 text-xs rounded-full border transition-colors duration-150 cursor-pointer
+                     {!newCategoryId
+                       ? 'border-primary/50 text-primary bg-primary/10'
+                       : 'border-outline-variant/20 text-on-surface/40 hover:text-on-surface/70'}"
+            >{t().noCategoryLabel}</button>
+            {#each reminderStore.categories as cat}
+              <button
+                onclick={() => (newCategoryId = cat.id)}
+                class="px-2.5 py-1 text-xs rounded-full border transition-colors duration-150 cursor-pointer flex items-center gap-1.5
+                       {newCategoryId === cat.id
+                         ? 'border-transparent text-on-surface'
+                         : 'border-outline-variant/20 text-on-surface/50 hover:text-on-surface/80'}"
+                style={newCategoryId === cat.id ? `background: ${cat.color}30; border-color: ${cat.color}80;` : ""}
+              >
+                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background: {cat.color}"></span>
+                {cat.name}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <!-- Spacer -->
+        <div class="flex-1 min-h-[12px]"></div>
+
+        <!-- Actions -->
+        <div class="flex gap-2 pt-3 border-t border-outline-variant/10 shrink-0">
+          <button
+            onclick={closeModal}
+            class="flex-1 py-2 rounded-lg text-sm text-on-surface/50 cursor-pointer
+                   bg-surface-container-highest border border-outline-variant/10
+                   hover:text-on-surface transition-colors duration-150"
+          >
+            {t().cancel}
+          </button>
+          <button
+            onclick={addReminder}
+            disabled={!canSave}
+            class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-150
+                   {canSave
+                     ? 'bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed hover:opacity-90 cursor-pointer shadow-[0_2px_16px_rgba(122,73,228,0.3)]'
+                     : 'bg-surface-container-highest text-on-surface/20 cursor-not-allowed'}"
+            aria-disabled={!canSave}
+          >
+            {t().save}
+          </button>
+        </div>
       </div>
 
-      <!-- Actions -->
-      <div class="flex gap-2 mt-4">
-        <button
-          onclick={closeModal}
-          class="flex-1 py-2 rounded-md text-sm text-zinc-400 cursor-pointer
-                 bg-zinc-900 border border-zinc-800
-                 hover:bg-zinc-800 hover:text-zinc-300 transition-colors duration-150"
-        >
-          {t().cancel}
-        </button>
-        <button
-          onclick={addReminder}
-          disabled={!canSave}
-          class="flex-1 py-2 rounded-md text-sm font-medium transition-colors duration-150
-                 {canSave
-                   ? 'bg-white text-zinc-900 hover:bg-zinc-100 cursor-pointer'
-                   : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}"
-          aria-disabled={!canSave}
-        >
-          {t().save}
-        </button>
-      </div>
     </div>
   </div>
 {/if}
